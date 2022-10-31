@@ -35,6 +35,7 @@ num-complex = "0.4.0"
 num-traits  = "0.2.14"
 rand = "0.8.3"
 thiserror = "1.0.24"
+statrs = "0.16.0"
 
 [dependencies.ndarray]
 version = "0.15.2"
@@ -52,6 +53,7 @@ criterion = "0.3.4"
 # Keep the same version as ndarray's dependency!
 approx = { version = "0.4.0", features = ["num-complex"] }
 rand_pcg = "0.3.1"
+
 
 [[bench]]
 name = "truncated_eig"
