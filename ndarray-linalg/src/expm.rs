@@ -25,9 +25,7 @@ const THETA_13: f64 = 4.25; // Alg 5.1
 // x^0 * PADE_COEFF_M[0] + x^1 * PADE_COEFF_M[1] + ... + x^m * PADE_COEFF_M[M]
 const PADE_COEFFS_3: [f64; 4] = [1., 0.5, 0.1, 1. / 120.];
 
-// const PADE_COEFFS_5: [f64; 6] = [1., 0.5, 1. / 9., 1. / 72., 1. / 1_008., 1. / 30_240.];
-
-const PADE_COEFFS_5: [f64; 6] = [30240., 15120., 3360., 420., 30., 1.];
+const PADE_COEFFS_5: [f64; 6] = [1., 0.5, 1. / 9., 1. / 72., 1. / 1_008., 1. / 30_240.];
 
 const PADE_COEFFS_7: [f64; 8] = [
     1.,
@@ -112,7 +110,6 @@ fn pade_approximation_5<S: Scalar<Real = f64> + Lapack>(
     a_4: &Array2<S>,
 ) -> Array2<S> {
     let mut evens: Array2<S> = Array2::<S>::eye(a_1.nrows());
-    evens.mapv_inplace(|x| S::from_real(PADE_COEFFS_5[0]) * x);
     evens.scaled_add(S::from_real(PADE_COEFFS_5[2]), a_2);
     evens.scaled_add(S::from_real(PADE_COEFFS_5[4]), a_4);
 
@@ -189,7 +186,6 @@ fn pade_approximation_13<S: Scalar<Real = f64> + Lapack>(
     a_6: &Array2<S>,
 ) -> Array2<S> {
     let mut evens_1: Array2<S> = Array::eye(a_1.nrows());
-    // evens_1.mapv_inplace(|x| S::from_real(PADE_COEFFS_13[0]) * x);
     evens_1.scaled_add(S::from_real(PADE_COEFFS_13[2]), a_2);
     evens_1.scaled_add(S::from_real(PADE_COEFFS_13[4]), a_4);
     evens_1.scaled_add(S::from_real(PADE_COEFFS_13[6]), a_6);
@@ -213,7 +209,9 @@ fn pade_approximation_13<S: Scalar<Real = f64> + Lapack>(
     odds_2 = odds_2.dot(a_6);
 
     let mut odds = (&odds_1 + &odds_2).dot(a_1);
-    let inverted: Array2<S> = (&evens - &odds).inv().unwrap();
+    odds.mapv_inplace(|x| -x);
+    let inverted: Array2<S> = (&odds + &evens).inv().unwrap();
+    odds.mapv_inplace(|x| -x);
     inverted.dot(&(odds + evens))
 }
 
@@ -262,31 +260,25 @@ pub fn expm<S: Scalar<Real = f64> + Lapack>(a_matrix: &Array2<S>) -> (Array2<S>,
     let mut a_6 = a_2.dot(&a_4);
     let d4 = a_4.opnorm_one().unwrap().powf(1. / 4.);
     let d6 = a_6.opnorm_one().unwrap().powf(1. / 6.);
-
     // Note d6 should be an estimate and d4 an estimate
     let eta_1 = f64::max(d4, d6);
     if eta_1 < THETA_3 && ell(&a_matrix, 3) == 0 {
         return (pade_approximation_3(a_matrix, &a_2), 3);
     }
-
     // d4 should be exact here, d6 an estimate
     let eta_2 = f64::max(d4, d6);
     if eta_2 < THETA_5 && ell(&a_matrix, 5) == 0 {
         return (pade_approximation_5(a_matrix, &a_2, &a_4), 5);
     }
-
     let a_8 = a_4.dot(&a_4);
     let d8 = a_8.opnorm_one().unwrap().powf(1. / 8.);
     let eta_3 = f64::max(d6, d8);
     if eta_3 < THETA_7 && ell(&a_matrix, 7) == 0 {
         return (pade_approximation_7(a_matrix, &a_2, &a_4, &a_6), 7);
     }
-
     if eta_3 < THETA_9 && ell(&a_matrix, 9) == 0 {
         return (pade_approximation_9(a_matrix, &a_2, &a_4, &a_6, &a_8), 9);
     }
-
-    // fallback to 13th order Pade with scaling and squaring
     let a_10 = a_2.dot(&a_8);
     let eta_4 = f64::max(d8, a_10.opnorm_one().unwrap());
     let eta_5 = f64::min(eta_3, eta_4);
