@@ -63,6 +63,25 @@ const PADE_COEFFS_13: [f64; 14] = [
     1. / 64_764_752_532_480_000.,
 ];
 
+const PADE_COEFFS_15: [f64; 16] = [
+    1.,
+    0.5,
+    7. / 58.,
+    13. / 696.,
+    13. / 6264.,
+    11. / 62_640.,
+    11. / 939_600.,
+    11. / 17_539_200.,
+    11. / 403_401_600.,
+    1. / 1_037_318_400.,
+    1. / 36_306_144_000.,
+    1. / 1_597_470_336_000.,
+    1. / 91_055_809_152_000.,
+    1. / 7_102_353_113_856_000.,
+    1. / 845_180_020_548_864_000.,
+    1. / 202_843_204_931_727_360_000.,
+];
+
 fn pade_approximation_3<S: Scalar<Real = f64> + Lapack>(
     a_1: &Array2<S>,
     a_2: &Array2<S>,
@@ -196,6 +215,49 @@ fn pade_approximation_13<S: Scalar<Real = f64> + Lapack>(
     Ok(inverted.dot(&(odds + evens)))
 }
 
+fn pade_approximation_15<S: Scalar<Real = f64> + Lapack>(
+    a_1: &Array2<S>,
+    a_2: &Array2<S>,
+    a_4: &Array2<S>,
+    a_6: &Array2<S>,
+) -> Result<Array2<S>> {
+    let mut evens_1: Array2<S> = Array::eye(a_1.nrows());
+    evens_1.mapv_inplace(|x| S::from_real(PADE_COEFFS_15[0]) * x);
+    evens_1.scaled_add(S::from_real(PADE_COEFFS_15[2]), a_2);
+    evens_1.scaled_add(S::from_real(PADE_COEFFS_15[4]), a_4);
+    evens_1.scaled_add(S::from_real(PADE_COEFFS_15[6]), a_6);
+    
+    let mut evens_2: Array2<S> = Array::eye(a_1.nrows());
+    evens_2.mapv_inplace(|x| S::from_real(PADE_COEFFS_15[8]) * x);
+    evens_2.scaled_add(S::from_real(PADE_COEFFS_15[10]), a_2);
+    evens_2.scaled_add(S::from_real(PADE_COEFFS_15[12]), a_4);
+    evens_2.scaled_add(S::from_real(PADE_COEFFS_15[14]), a_6);
+    evens_2 = evens_2.dot(a_2);
+    evens_2 = evens_2.dot(a_6);
+
+    let evens = evens_1 + evens_2;
+
+    let mut odds_1: Array2<S> = Array::eye(a_1.nrows());
+    odds_1.mapv_inplace(|x| S::from_real(PADE_COEFFS_15[1]) * x);
+    odds_1.scaled_add(S::from_real(PADE_COEFFS_15[3]), a_2);
+    odds_1.scaled_add(S::from_real(PADE_COEFFS_15[5]), a_4);
+    odds_1.scaled_add(S::from_real(PADE_COEFFS_15[7]), a_6);
+    
+    let mut odds_2: Array2<S> = Array::eye(a_1.nrows());
+    odds_2.mapv_inplace(|x| S::from_real(PADE_COEFFS_15[9]) * x);
+    odds_2.scaled_add(S::from_real(PADE_COEFFS_15[11]), a_2);
+    odds_2.scaled_add(S::from_real(PADE_COEFFS_15[13]), a_4);
+    odds_2.scaled_add(S::from_real(PADE_COEFFS_15[15]), a_6);
+    odds_2 = odds_2.dot(a_4);
+    odds_2 = odds_2.dot(a_4);
+    let mut odds = a_1.dot(&(odds_1 + odds_2));
+
+    odds.mapv_inplace(|x| -x);
+    let inverted: Array2<S> = (&odds + &evens).inv()?;
+    odds.mapv_inplace(|x| -x);
+    Ok(inverted.dot(&(odds + evens)))
+}
+
 fn power_abs_norm<S>(input_matrix: &Array2<S>, p: usize) -> f64
 where
     S: Scalar<Real = f64>,
@@ -294,4 +356,11 @@ pub fn expm<S: Scalar<Real = f64> + Lapack>(a_matrix: &Array2<S>) -> Result<Arra
         output = output.dot(&output);
     }
     Ok(output)
+}
+
+pub fn test_expm<S: Scalar<Real = f64> + Lapack>(a_matrix: &Array2<S>) -> Result<Array2<S>> {
+    let a_2 = a_matrix.dot(a_matrix);
+    let a_4 = a_2.dot(&a_2);
+    let a_6 = a_2.dot(&a_4);
+    pade_approximation_15(a_matrix, &a_2, &a_4, &a_6)
 }
